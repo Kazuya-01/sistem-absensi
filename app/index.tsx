@@ -1,51 +1,56 @@
+import axios from 'axios';
 import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, SafeAreaView, ImageBackground } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, SafeAreaView, ImageBackground, Platform } from 'react-native';
 
 export default function App() {
   const [nisn, setNisn] = useState('');
-  const [password, setPassword] = useState('');
+  const [tanggal_lahir, setTanggal_lahir] = useState('');
   const router = useRouter()
-
-  const handleLogin = () => {
-  router.replace('/tampilan-home')
-    if (!nisn || !password) {
-      Alert.alert('Error', 'Please enter both NISN and password');
-    } else {
-      Alert.alert('Login Success', `Welcome, NISN: ${nisn}`);
-    }
+  const handleLogin = async () => {
+    const response = await axios.post('http://192.168.1.10:8000/api/login', { nisn, tanggal_lahir })
+    const siswa = response.data.siswa
+   
+   console.log(response)
+   try {
+    Alert.alert('Login Success', `Welcome, ${siswa.nama}`);
+    router.replace(`/tampilan-home?nisn=${siswa.nisn}&nama=${siswa.nama}`)
+    
+   } catch (error) {
+    console.error(error)
+   }
+  
   };
 
   return (
     <SafeAreaView style={styles.container}>
-      
-        <View style={styles.overlay}>
-          <View style={styles.card}>
-            <Text style={styles.title}>Login</Text>
-            
-            <TextInput
+
+      <View style={styles.overlay}>
+        <View style={styles.card}>
+          <Text style={styles.title}>Login</Text>
+
+          <TextInput
+            style={styles.input}
+            placeholder="NISN"
+            value={nisn}
+            onChangeText={setNisn}
+            keyboardType="numeric"
+            placeholderTextColor="#b0b0b0"
+          />
+
+          <TextInput
               style={styles.input}
-              placeholder="NISN"
-              value={nisn}
-              onChangeText={setNisn}
-              keyboardType="numeric" 
+              placeholder="Tanggal Lahir"
+              value={tanggal_lahir}
+              onChangeText={(text)=>setTanggal_lahir(text)}
               placeholderTextColor="#b0b0b0"
             />
-            
-            <TextInput
-              style={styles.input}
-              placeholder="Password"
-              value={password}
-              onChangeText={setPassword}
-              secureTextEntry
-              placeholderTextColor="#b0b0b0"
-            />
-            
-            <TouchableOpacity style={styles.button} onPress={handleLogin}>
-              <Text style={styles.buttonText}>Login</Text>
-            </TouchableOpacity>
-          </View>
+         
+          <TouchableOpacity style={styles.button} onPress={handleLogin}>
+            <Text style={styles.buttonText}>Login</Text>
+          </TouchableOpacity>
         </View>
+      </View>
     </SafeAreaView>
   );
 }
@@ -63,8 +68,8 @@ const styles = StyleSheet.create({
     height: '100%',
   },
   overlay: {
-    flex:1,
-    backgroundColor: 'rgba(255, 255, 255, 0.7)', 
+    flex: 1,
+    backgroundColor: 'rgba(255, 255, 255, 0.7)',
     padding: 30,
     borderRadius: 10,
     width: '100%',
@@ -77,8 +82,8 @@ const styles = StyleSheet.create({
     padding: 25,
     width: '90%',
     maxWidth: 400,
-    elevation: 5, 
-    shadowColor: '#000', 
+    elevation: 5,
+    shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 6,
@@ -87,7 +92,7 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 32,
     fontWeight: 'bold',
-    color: '#ff6347', 
+    color: '#ff6347',
     marginBottom: 20,
   },
   input: {
@@ -95,13 +100,13 @@ const styles = StyleSheet.create({
     height: 50,
     marginVertical: 10,
     borderWidth: 1,
-    borderColor: '#ff6347', 
+    borderColor: '#ff6347',
     borderRadius: 5,
     paddingLeft: 10,
     backgroundColor: '#fff',
   },
   button: {
-    backgroundColor: '#ff6347', 
+    backgroundColor: '#ff6347',
     paddingVertical: 15,
     paddingHorizontal: 60,
     borderRadius: 5,

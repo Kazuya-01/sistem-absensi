@@ -32,10 +32,29 @@
           "resizeMode": "contain",
           "backgroundColor": "#ffffff"
         }
-      ]
+      ],
+      "expo-barcode-scanner"
     ],
     "experiments": {
       "typedRoutes": true
     }
-  }
+  },
+  "ios": {
+    "infoPlist": {
+      "NSCameraUsageDescription": "This app needs access to the camera"
+    }
+  },
+  "android": {
+    "permissions": ["CAMERA"]
+  },
+  "plugins": [
+    [
+      "expo-camera",
+      {
+        "cameraPermission": "Allow $(PRODUCT_NAME) to access your camera",
+        "microphonePermission": "Allow $(PRODUCT_NAME) to access your microphone",
+        "recordAudioAndroid": true
+      }
+    ]
+  ]
 }
