@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Alert } from 'react-native';
 import { useRootNavigationState, useRouter } from 'expo-router';
 import { CameraType, CameraView, useCameraPermissions } from 'expo-camera';
-import { Ionicons } from '@expo/vector-icons'; // Untuk ikon sederhana
+import { Ionicons } from '@expo/vector-icons'; 
 import axios from 'axios';
 
 export default function Home() {
@@ -27,8 +27,11 @@ export default function Home() {
       </View>
     );
   }
+  type QRCodeResult = {
+    data: String; // untuk properti data yang berisi dari hasil Qr-qode
+  };
 
-  async function handleScanned(qr: any) {
+  async function handleScanned(qr: QRCodeResult) {
     setShow(false);
 
     const data = {
