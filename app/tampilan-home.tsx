@@ -71,7 +71,7 @@ export default function Home() {
         if(response.data.status !== 'online'){
           return alert('bukan sesi online')
         }
-        router.push('/online-screen')
+        router.push(`/online-screen?nisn=${params.nisn}&koordinat=${params.koordinat}`)
       } catch (error) {
         console.error("Error fetching status:", error);
       }

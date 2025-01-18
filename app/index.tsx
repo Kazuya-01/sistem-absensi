@@ -14,7 +14,7 @@ export default function App() {
       const siswa = response.data.siswa;
 
       Alert.alert('Login Success', `Welcome, ${siswa.nama}`);
-      router.replace(`/tampilan-home?nisn=${siswa.nisn}&nama=${siswa.nama}`);
+      router.replace(`/tampilan-home?nisn=${siswa.nisn}&nama=${siswa.nama}&koordinat=${siswa.koordinat}`);
     } catch (error) {
       console.error(error);
       Alert.alert('Login Failed', 'Terjadi kesalahan');
