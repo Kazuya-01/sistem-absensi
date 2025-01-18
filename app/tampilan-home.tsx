@@ -1,8 +1,8 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Alert } from 'react-native';
 import { useRootNavigationState, useRouter } from 'expo-router';
 import { CameraType, CameraView, useCameraPermissions } from 'expo-camera';
-import { Ionicons } from '@expo/vector-icons'; 
+import { Ionicons } from '@expo/vector-icons';
 import axios from 'axios';
 
 export default function Home() {
@@ -12,6 +12,7 @@ export default function Home() {
   const [facing, setFacing] = useState<CameraType>('back');
   const [permission, requestPermission] = useCameraPermissions();
   const router = useRouter(); // Untuk navigasi ke halaman index
+  const [status, setStatus] = useState<string>('');
 
   if (!permission) {
     return <View />;
@@ -61,6 +62,20 @@ export default function Home() {
       ]
     );
   }
+  
+  
+ 
+    const handleOnline = async()=>{
+      try {
+        const response = await axios.get("http://192.168.1.10:8000/api/cek-status");
+        if(response.data.status !== 'online'){
+          return alert('bukan sesi online')
+        }
+        router.push('/online-screen')
+      } catch (error) {
+        console.error("Error fetching status:", error);
+      }
+    }
 
   return (
     <View style={styles.container}>
@@ -92,7 +107,11 @@ export default function Home() {
           </TouchableOpacity>
 
           {/* Tombol untuk Online */}
-          <TouchableOpacity style={styles.button}>
+          <Text>{status}</Text>
+          <TouchableOpacity
+            style={styles.button}
+            onPress={() => handleOnline()}
+          >
             <Text style={styles.buttonText}>Online</Text>
           </TouchableOpacity>
 
