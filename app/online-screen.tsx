@@ -5,6 +5,7 @@ import {
   Text,
   Alert,
   TouchableOpacity,
+  Linking,
 } from 'react-native';
 import MapView, { Marker } from 'react-native-maps';
 import * as Location from 'expo-location';
@@ -20,12 +21,9 @@ export default function AttendanceScreen() {
     longitudeDelta: 0.01,
   });
   const [selectedStatus, setSelectedStatus] = useState('');
-  const [isMapReady, setIsMapReady] = useState(false); // Flag to track if map is ready
   const { routes } = useRootNavigationState();
-  const [show, setShow] = useState(false);
   const { params } = routes[0];
-  const {nisn,koordinat} = params
-
+  const { nisn, koordinat, nama } = params; // Tambahkan 'nama' jika diperlukan
 
   useEffect(() => {
     requestLocationPermission();
@@ -37,10 +35,7 @@ export default function AttendanceScreen() {
       if (status === 'granted') {
         getCurrentLocation();
       } else {
-        Alert.alert(
-          'Izin Ditolak',
-          'Izin lokasi diperlukan untuk menggunakan fitur ini.'
-        );
+        Alert.alert('Izin Ditolak', 'Izin lokasi diperlukan untuk menggunakan fitur ini.');
       }
     } catch (error) {
       console.error('Kesalahan izin:', error);
@@ -71,51 +66,90 @@ export default function AttendanceScreen() {
     }
   };
 
-  const handleMapReady = () => {
-    setIsMapReady(true);
-    getCurrentLocation(); // Ensure the map is refreshed with the current location
-  };
-
-  const handleSubmit = async() => {
+  const handleSubmit = async () => {
     if (!selectedStatus) {
       Alert.alert('Kesalahan', 'Harap pilih status kehadiran Anda.');
       return;
     }
-    if(selectedStatus==='Hadir'){
-      const response = await axios.get('http://192.168.1.10:8000/api/cek-jam')
-      if(response.data.isValid===false){
-        Alert.alert('Kesalahan', 'Sesi absen telah berakhir.');
-        return
-      }
-    const koordinatSekarang =`${currentLocation.latitude}, ${currentLocation.longitude}`
-    const jarak = await axios.get(`https://script.google.com/macros/s/AKfycbyHHxB_PvxnD8g_o2OilYjuQusYR0KlpqrdKQ02XbGMAL4l46tXbc7iagqXfSYjZ4EGHw/exec?action=hitung-jarak&asal=${koordinatSekarang}&tujuan=${koordinat}`)
-    if(jarak.data.values>=10){
-       Alert.alert('Kesalahan', 'Absen harus di rumah sendiri.');
-       return
-    }
-    const data = {
-      nisn: params.nisn,
-      status: 'h',
-      koordinat: koordinatSekarang,
-    };
 
-    const responsToken = await axios.get('http://192.168.1.10:8000/api/generate-token')
-    const token = responsToken.data.token
-    const respons = await axios.post('http://192.168.1.10:8000/api/absensi', data, { headers: { Authorization: `Bearer ${token}` } });
-    if (respons.data) {
-      alert('Berhasil absen');
+    // Logika untuk status "Izin" dan "Sakit"
+    if (selectedStatus === 'Izin' || selectedStatus === 'Sakit') {
+      try {
+        // Kirim data ke server
+        const statusCode = selectedStatus === 'Izin' ? 'i' : 's';
+        const data = {
+          nisn: nisn,
+          status: statusCode,
+          koordinat: `${currentLocation.latitude}, ${currentLocation.longitude}`,
+        };
+
+        const responsToken = await axios.get('http://192.168.1.10:8000/api/generate-token');
+        const token = responsToken.data.token;
+
+        const respons = await axios.post('http://192.168.1.10:8000/api/absensi', data, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+
+        if (respons.data) {
+          // Setelah data terkirim, buka WhatsApp dengan format pesan
+          const phoneNumber = '+6289513081384'; // Nomor WhatsApp tujuan
+          let message = `Nama: ${nama}\nNISN: ${nisn}`;
+
+          if (selectedStatus === 'Izin') {
+            message += `\nAlasan Izin:`;
+          } else if (selectedStatus === 'Sakit') {
+            message += `\nKeterangan: Sakit\n*Harap melampirkan bukti surat sakit dari dokter, jika dalam 24 jam tidak melampirkan maka akan dianggap alfa.*`;
+          }
+
+          const whatsappURL = `https://wa.me/${phoneNumber}?text=${encodeURIComponent(message)}`;
+          const supported = await Linking.canOpenURL(whatsappURL);
+
+          if (supported) {
+            await Linking.openURL(whatsappURL);
+          } else {
+            Alert.alert('Kesalahan', 'Tidak dapat membuka WhatsApp.');
+          }
+        }
+      } catch (error) {
+        console.error('Kesalahan saat mengirim data:', error);
+        Alert.alert('Kesalahan', 'Gagal mengirim data. Silakan coba lagi.');
+      }
+      return;
     }
+
+    // Logika untuk Hadir
+    if (selectedStatus === 'Hadir') {
+      try {
+        const koordinatSekarang = `${currentLocation.latitude}, ${currentLocation.longitude}`;
+        const responsToken = await axios.get('http://192.168.1.10:8000/api/generate-token');
+        const token = responsToken.data.token;
+
+        const data = {
+          nisn: nisn,
+          status: 'h', // 'h' untuk Hadir
+          koordinat: koordinatSekarang,
+        };
+
+        const respons = await axios.post('http://192.168.1.10:8000/api/absensi', data, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+
+        if (respons.data) {
+          Alert.alert('Berhasil', 'Absen Hadir berhasil.');
+        }
+      } catch (error) {
+        console.error('Kesalahan saat mengirim data Hadir:', error);
+        Alert.alert('Kesalahan', 'Gagal mengirim data Hadir. Silakan coba lagi.');
+      }
     }
   };
 
   return (
     <View style={styles.container}>
-      {/* Peta */}
       <MapView
         style={styles.map}
         region={currentLocation}
         showsUserLocation={true}
-        onMapReady={handleMapReady} // Ensure the map is refreshed when ready
       >
         <Marker
           coordinate={{
@@ -126,7 +160,6 @@ export default function AttendanceScreen() {
         />
       </MapView>
 
-      {/* Menu Dropdown */}
       <View style={styles.pickerContainer}>
         <Picker
           selectedValue={selectedStatus}
@@ -140,7 +173,6 @@ export default function AttendanceScreen() {
         </Picker>
       </View>
 
-      {/* Tombol Kirim */}
       <TouchableOpacity style={styles.button} onPress={handleSubmit}>
         <Text style={styles.buttonText}>Kirim</Text>
       </TouchableOpacity>

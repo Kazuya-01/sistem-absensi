@@ -28,6 +28,7 @@ export default function Home() {
       </View>
     );
   }
+
   type QRCodeResult = {
     data: String; // untuk properti data yang berisi dari hasil Qr-qode
   };
@@ -35,16 +36,27 @@ export default function Home() {
   async function handleScanned(qr: QRCodeResult) {
     setShow(false);
 
+    if (!qr.data) {
+      // Notifikasi kesalahan jika data QR kosong
+      Alert.alert('Kesalahan', 'QR Code tidak valid.');
+      return;
+    }
+
     const data = {
       nisn: params.nisn,
       status: 'h',
       koordinat: '-6.798919218710382, 106.77984713684613',
     };
 
-    const response = await axios.post('http://192.168.1.10:8000/api/absensi', data, { headers: { Authorization: `Bearer ${qr.data}` } });
+    try {
+      const response = await axios.post('http://192.168.1.10:8000/api/absensi', data, { headers: { Authorization: `Bearer ${qr.data}` } });
 
-    if (response.data) {
-      alert('Berhasil absen');
+      if (response.data) {
+        Alert.alert('Berhasil', 'Absen berhasil.');
+      }
+    } catch (error) {
+      console.error("Error during attendance:", error);
+      Alert.alert('Kesalahan', 'Terjadi kesalahan saat mengirim data absensi.');
     }
   }
 
@@ -62,20 +74,18 @@ export default function Home() {
       ]
     );
   }
-  
-  
- 
-    const handleOnline = async()=>{
-      try {
-        const response = await axios.get("http://192.168.1.10:8000/api/cek-status");
-        if(response.data.status !== 'online'){
-          return alert('bukan sesi online')
-        }
-        router.push(`/online-screen?nisn=${params.nisn}&koordinat=${params.koordinat}`)
-      } catch (error) {
-        console.error("Error fetching status:", error);
+
+  const handleOnline = async () => {
+    try {
+      const response = await axios.get("http://192.168.1.10:8000/api/cek-status");
+      if (response.data.status !== 'online') {
+        return alert('Bukan sesi online');
       }
+      router.push(`/online-screen?nisn=${params.nisn}&koordinat=${params.koordinat}`);
+    } catch (error) {
+      console.error("Error fetching status:", error);
     }
+  };
 
   return (
     <View style={styles.container}>
