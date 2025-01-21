@@ -92,7 +92,7 @@ export default function AttendanceScreen() {
 
         if (respons.data) {
           // Setelah data terkirim, buka WhatsApp dengan format pesan
-          const phoneNumber = '+6289513081384'; // Nomor WhatsApp tujuan
+          const phoneNumber = '08323248332'; // Nomor WhatsApp tujuan
           let message = `Nama: ${nama}\nNISN: ${nisn}`;
 
           if (selectedStatus === 'Izin') {
