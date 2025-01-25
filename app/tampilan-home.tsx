@@ -29,41 +29,34 @@ export default function Home() {
     );
   }
 
+  // Menangani hasil scan QR Code
   type QRCodeResult = {
-    data: String; // untuk properti data yang berisi dari hasil Qr-qode
+    data: String;
   };
 
   async function handleScanned(qr: QRCodeResult) {
     setShow(false);
 
-    if (!qr.data) {
-      // Notifikasi kesalahan jika data QR kosong
-      Alert.alert('Kesalahan', 'QR Code tidak valid.');
-      return;
-    }
-
     const data = {
       nisn: params.nisn,
       status: 'h',
-      koordinat: '-6.798919218710382, 106.77984713684613',
+      koordinat: '-6.798919218710382, 106.77984713684613', // Koordinat contoh, ganti sesuai kebutuhan
     };
 
-    try {
-      const response = await axios.post('http://192.168.1.10:8000/api/absensi', data, { headers: { Authorization: `Bearer ${qr.data}` } });
+    // Kirim request absensi ke API
+    const response = await axios.post('http://192.168.1.10:8000/api/absensi', data, { headers: { Authorization: `Bearer ${qr.data}` } });
 
-      if (response.data) {
-        Alert.alert('Berhasil', 'Absen berhasil.');
-      }
-    } catch (error) {
-      console.error("Error during attendance:", error);
-      Alert.alert('Kesalahan', 'Terjadi kesalahan saat mengirim data absensi.');
+    if (response.data) {
+      alert('Berhasil absen');
     }
   }
 
+  // Fungsi untuk mengganti kamera depan atau belakang
   function toggleCameraFacing() {
     setFacing(current => (current === 'back' ? 'front' : 'back'));
   }
 
+  // Fungsi Logout
   function handleLogout() {
     Alert.alert(
       'Logout',
@@ -75,18 +68,21 @@ export default function Home() {
     );
   }
 
+  // Fungsi untuk memeriksa status online
   const handleOnline = async () => {
     try {
       const response = await axios.get("http://192.168.1.10:8000/api/cek-status");
       if (response.data.status !== 'online') {
         return alert('Bukan sesi online');
       }
+      // Menggunakan query params untuk mengirimkan nisn dan koordinat ke halaman lain
       router.push(`/online-screen?nisn=${params.nisn}&koordinat=${params.koordinat}`);
     } catch (error) {
       console.error("Error fetching status:", error);
+      alert('Gagal memeriksa status online');
     }
   };
-
+  
   return (
     <View style={styles.container}>
       {show ? (

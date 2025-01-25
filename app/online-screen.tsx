@@ -10,8 +10,9 @@ import {
 import MapView, { Marker } from 'react-native-maps';
 import * as Location from 'expo-location';
 import { Picker } from '@react-native-picker/picker';
-import { useRootNavigationState } from 'expo-router';
 import axios from 'axios';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useRootNavigationState } from 'expo-router';
 
 export default function AttendanceScreen() {
   const [currentLocation, setCurrentLocation] = useState({
@@ -21,13 +22,35 @@ export default function AttendanceScreen() {
     longitudeDelta: 0.01,
   });
   const [selectedStatus, setSelectedStatus] = useState('');
+  const [isCooldown, setIsCooldown] = useState(false);
+  const [remainingTime, setRemainingTime] = useState(0);
   const { routes } = useRootNavigationState();
   const { params } = routes[0];
-  const { nisn, koordinat, nama } = params; // Tambahkan 'nama' jika diperlukan
+  const { nisn, koordinat, nama } = params;
 
   useEffect(() => {
-    requestLocationPermission();
+    requestLocationPermission(); // Ensure location permission is granted on mount
+    checkCooldown();
   }, []);
+
+  useEffect(() => {
+    let interval: string | number | NodeJS.Timeout | undefined;
+
+    if (isCooldown) {
+      interval = setInterval(() => {
+        setRemainingTime((prev) => {
+          if (prev <= 1) {
+            clearInterval(interval);
+            setIsCooldown(false);
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+    }
+
+    return () => clearInterval(interval);
+  }, [isCooldown]);
 
   const requestLocationPermission = async () => {
     try {
@@ -66,99 +89,127 @@ export default function AttendanceScreen() {
     }
   };
 
+  const checkCooldown = async () => {
+    try {
+      const cooldownTime = await AsyncStorage.getItem('cooldownTime');
+      if (cooldownTime) {
+        const now = new Date().getTime();
+        if (now < parseInt(cooldownTime, 10)) {
+          const remaining = Math.ceil((parseInt(cooldownTime, 10) - now) / 1000);
+          setRemainingTime(remaining);
+          setIsCooldown(true);
+        }
+      }
+    } catch (error) {
+      console.error('Kesalahan saat memeriksa cooldown:', error);
+    }
+  };
+
   const handleSubmit = async () => {
+    if (isCooldown) return;
+  
     if (!selectedStatus) {
       Alert.alert('Kesalahan', 'Harap pilih status kehadiran Anda.');
       return;
     }
-
-    // Logika untuk status "Izin" dan "Sakit"
-    if (selectedStatus === 'Izin' || selectedStatus === 'Sakit') {
-      try {
-        // Kirim data ke server
-        const statusCode = selectedStatus === 'Izin' ? 'i' : 's';
-        const data = {
-          nisn: nisn,
-          status: statusCode,
-          koordinat: `${currentLocation.latitude}, ${currentLocation.longitude}`,
-        };
-
-        const responsToken = await axios.get('http://192.168.1.10:8000/api/generate-token');
-        const token = responsToken.data.token;
-
-        const respons = await axios.post('http://192.168.1.10:8000/api/absensi', data, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-
-        if (respons.data) {
-          // Setelah data terkirim, buka WhatsApp dengan format pesan
-          const phoneNumber = '08323248332'; // Nomor WhatsApp tujuan
+  
+    const koordinatSekarang = `${currentLocation.latitude}, ${currentLocation.longitude}`;
+    console.log('Koordinat Sekarang (Asal):', koordinatSekarang);
+    console.log('Koordinat Tujuan:', koordinat);
+  
+    try {
+      // Menggunakan API eksternal untuk menghitung jarak
+      const jarak = await axios.get(
+        `https://script.google.com/macros/s/AKfycbyHHxB_PvxnD8g_o2OilYjuQusYR0KlpqrdKQ02XbGMAL4l46tXbc7iagqXfSYjZ4EGHw/exec?action=hitung-jarak&asal=${koordinatSekarang}&tujuan=${koordinat}`
+      );
+  
+      // Debugging: Cek hasil jarak
+      console.log('Jarak:', jarak.data);
+  
+      // Cek jika API mengembalikan pesan error atau respons false
+      if (jarak.data.response === false) {
+        Alert.alert('Kesalahan',  'absen tidak dapat dilakukan,tolong absen di rumah sendiri.');
+        return;
+      }
+  
+     
+      if (jarak.data.values >= 20) {
+        Alert.alert('Kesalahan', 'Absen hanya bisa dilakukan jika Anda berada di rumah sendiri (jarak <= 20 meter).');
+        return;
+      }
+  
+      const statusCode =
+        selectedStatus === 'Izin' ? 'i' : selectedStatus === 'Sakit' ? 's' : 'h';
+      const data = {
+        nisn: nisn,
+        status: statusCode,
+        koordinat: `${currentLocation.latitude}, ${currentLocation.longitude}`,
+      };
+  
+      const responsToken = await axios.get('http://192.168.1.10:8000/api/generate-token');
+      const token = responsToken.data.token;
+  
+      const respons = await axios.post('http://192.168.1.10:8000/api/absensi', data, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+  
+      if (respons.data) {
+        if (selectedStatus === 'Izin' || selectedStatus === 'Sakit') {
+          const phoneNumber = '+6283896064130';
           let message = `Nama: ${nama}\nNISN: ${nisn}`;
-
+  
           if (selectedStatus === 'Izin') {
             message += `\nAlasan Izin:`;
           } else if (selectedStatus === 'Sakit') {
             message += `\nKeterangan: Sakit\n*Harap melampirkan bukti surat sakit dari dokter, jika dalam 24 jam tidak melampirkan maka akan dianggap alfa.*`;
           }
-
+  
           const whatsappURL = `https://wa.me/${phoneNumber}?text=${encodeURIComponent(message)}`;
           const supported = await Linking.canOpenURL(whatsappURL);
-
+  
           if (supported) {
             await Linking.openURL(whatsappURL);
           } else {
             Alert.alert('Kesalahan', 'Tidak dapat membuka WhatsApp.');
           }
-        }
-      } catch (error) {
-        console.error('Kesalahan saat mengirim data:', error);
-        Alert.alert('Kesalahan', 'Gagal mengirim data. Silakan coba lagi.');
-      }
-      return;
-    }
-
-    // Logika untuk Hadir
-    if (selectedStatus === 'Hadir') {
-      try {
-        const koordinatSekarang = `${currentLocation.latitude}, ${currentLocation.longitude}`;
-        const responsToken = await axios.get('http://192.168.1.10:8000/api/generate-token');
-        const token = responsToken.data.token;
-
-        const data = {
-          nisn: nisn,
-          status: 'h', // 'h' untuk Hadir
-          koordinat: koordinatSekarang,
-        };
-
-        const respons = await axios.post('http://192.168.1.10:8000/api/absensi', data, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-
-        if (respons.data) {
+        } else if (selectedStatus === 'Hadir') {
           Alert.alert('Berhasil', 'Absen Hadir berhasil.');
         }
-      } catch (error) {
-        console.error('Kesalahan saat mengirim data Hadir:', error);
-        Alert.alert('Kesalahan', 'Gagal mengirim data Hadir. Silakan coba lagi.');
       }
+  
+      // Set cooldown 30 detik setelah absen
+      const cooldownDuration = 30; 
+      const cooldownEndTime = new Date().getTime() + cooldownDuration * 1000;
+  
+      setIsCooldown(true);
+      setRemainingTime(cooldownDuration);
+      await AsyncStorage.setItem('cooldownTime', cooldownEndTime.toString());
+    } catch (error) {
+      console.error('Kesalahan saat mengirim data:', error);
+      Alert.alert('Kesalahan', 'Gagal mengirim data. Silakan coba lagi.');
     }
   };
+  
 
   return (
     <View style={styles.container}>
-      <MapView
-        style={styles.map}
-        region={currentLocation}
-        showsUserLocation={true}
-      >
-        <Marker
-          coordinate={{
-            latitude: currentLocation.latitude,
-            longitude: currentLocation.longitude,
-          }}
-          title="Lokasi Anda"
-        />
-      </MapView>
+      {currentLocation.latitude !== 0 && currentLocation.longitude !== 0 ? (
+        <MapView
+          style={styles.map}
+          region={currentLocation}
+          showsUserLocation={true}
+        >
+          <Marker
+            coordinate={{
+              latitude: currentLocation.latitude,
+              longitude: currentLocation.longitude,
+            }}
+            title="Lokasi Anda"
+          />
+        </MapView>
+      ) : (
+        <Text style={styles.loadingText}>Menunggu lokasi...</Text>
+      )}
 
       <View style={styles.pickerContainer}>
         <Picker
@@ -173,9 +224,21 @@ export default function AttendanceScreen() {
         </Picker>
       </View>
 
-      <TouchableOpacity style={styles.button} onPress={handleSubmit}>
-        <Text style={styles.buttonText}>Kirim</Text>
+      <TouchableOpacity
+        style={[styles.button, isCooldown && { backgroundColor: '#ccc' }]}
+        onPress={handleSubmit}
+        disabled={isCooldown}
+      >
+        <Text style={styles.buttonText}>
+          {isCooldown ? 'Tunggu...' : 'Kirim'}
+        </Text>
       </TouchableOpacity>
+
+      {isCooldown && (
+        <Text style={styles.cooldownText}>
+          Harap tunggu {remainingTime} detik sebelum mencoba lagi.
+        </Text>
+      )}
     </View>
   );
 }
@@ -219,5 +282,17 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontWeight: 'bold',
     fontSize: 16,
+  },
+  cooldownText: {
+    marginTop: 10,
+    textAlign: 'center',
+    color: '#fff',
+    fontSize: 14,
+  },
+  loadingText: { 
+    color: '#fff',
+    textAlign: 'center',
+    fontSize: 18,
+    marginTop: 50,
   },
 });

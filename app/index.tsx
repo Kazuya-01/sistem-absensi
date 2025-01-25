@@ -9,17 +9,26 @@ export default function App() {
   const router = useRouter();
 
   const handleLogin = async () => {
+    if (!nisn || !tanggal_lahir) {
+      return Alert.alert('Error', 'NISN dan Tanggal Lahir harus diisi');
+    }
+  
     try {
       const response = await axios.post('http://192.168.1.10:8000/api/login', { nisn, tanggal_lahir });
       const siswa = response.data.siswa;
-
-      Alert.alert('Login Success', `Welcome, ${siswa.nama}`);
-      router.replace(`/tampilan-home?nisn=${siswa.nisn}&nama=${siswa.nama}&koordinat=${siswa.koordinat}`);
+  
+      if (siswa) {
+        Alert.alert('Login Success', `Welcome, ${siswa.nama}`);
+        router.replace(`/tampilan-home?nisn=${siswa.nisn}&nama=${siswa.nama}&koordinat=${siswa.koordinat}`);
+      } else {
+        Alert.alert('Login Failed', 'Data tidak ditemukan');
+      }
     } catch (error) {
       console.error(error);
-      Alert.alert('Login Failed', 'Terjadi kesalahan');
+      Alert.alert('Login Failed', 'Terjadi kesalahan saat login');
     }
   };
+  
 
   return (
     <SafeAreaView style={styles.container}>
