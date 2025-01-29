@@ -1,7 +1,8 @@
 import axios from 'axios';
 import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, SafeAreaView } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, SafeAreaView } from 'react-native';
+import FlashMessage, { showMessage } from 'react-native-flash-message';
 
 export default function App() {
   const [nisn, setNisn] = useState('');
@@ -10,25 +11,46 @@ export default function App() {
 
   const handleLogin = async () => {
     if (!nisn || !tanggal_lahir) {
-      return Alert.alert('Error', 'NISN dan Tanggal Lahir harus diisi');
+      return showMessage({
+        message: 'Error',
+        description: 'NISN dan Tanggal Lahir harus diisi',
+        type: 'danger',
+        icon: 'auto',
+      });
     }
-  
+
     try {
       const response = await axios.post('http://192.168.1.10:8000/api/login', { nisn, tanggal_lahir });
       const siswa = response.data.siswa;
-  
+
       if (siswa) {
-        Alert.alert('Login Success', `Welcome, ${siswa.nama}`);
-        router.replace(`/tampilan-home?nisn=${siswa.nisn}&nama=${siswa.nama}&koordinat=${siswa.koordinat}`);
+        showMessage({
+          message: 'Login Success',
+          description: `Welcome, ${siswa.nama}`,
+          type: 'success',
+          icon: 'auto',
+        });
+        setTimeout(() => {
+          router.replace(`/tampilan-home?nisn=${siswa.nisn}&nama=${siswa.nama}&koordinat=${siswa.koordinat}`);
+        }, 800); // Shorter delay for better UX
       } else {
-        Alert.alert('Login Failed', 'Data tidak ditemukan');
+        showMessage({
+          message: 'Login Failed',
+          description: 'Data tidak ditemukan',
+          type: 'warning',
+          icon: 'auto',
+        });
       }
     } catch (error) {
       console.error(error);
-      Alert.alert('Login Failed', 'Terjadi kesalahan saat login');
+      showMessage({
+        message: 'Login Failed',
+        description: 'Terjadi kesalahan saat login',
+        type: 'danger',
+        icon: 'auto',
+      });
     }
   };
-  
 
   return (
     <SafeAreaView style={styles.container}>
@@ -56,6 +78,8 @@ export default function App() {
           <Text style={styles.buttonText}>LOGIN</Text>
         </TouchableOpacity>
       </View>
+
+      <FlashMessage position="top" />
     </SafeAreaView>
   );
 }
@@ -63,7 +87,7 @@ export default function App() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#1a2948', 
+    backgroundColor: '#1a2948',
     justifyContent: 'center',
     alignItems: 'center',
   },

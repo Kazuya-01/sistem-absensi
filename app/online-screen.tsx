@@ -29,7 +29,7 @@ export default function AttendanceScreen() {
   const { nisn, koordinat, nama } = params;
 
   useEffect(() => {
-    requestLocationPermission(); // Ensure location permission is granted on mount
+    requestLocationPermission();
     checkCooldown();
   }, []);
 
@@ -107,66 +107,72 @@ export default function AttendanceScreen() {
 
   const handleSubmit = async () => {
     if (isCooldown) return;
-  
+
     if (!selectedStatus) {
       Alert.alert('Kesalahan', 'Harap pilih status kehadiran Anda.');
       return;
     }
-  
-    const koordinatSekarang = `${currentLocation.latitude}, ${currentLocation.longitude}`;
-    console.log('Koordinat Sekarang (Asal):', koordinatSekarang);
+
+    const koordinatSekarang = `${currentLocation.latitude},${currentLocation.longitude}`;
+    console.log('Koordinat Sekarang:', koordinatSekarang);
     console.log('Koordinat Tujuan:', koordinat);
-  
+
     try {
-      // Menggunakan API eksternal untuk menghitung jarak
-      const jarak = await axios.get(
-        `https://script.google.com/macros/s/AKfycbyHHxB_PvxnD8g_o2OilYjuQusYR0KlpqrdKQ02XbGMAL4l46tXbc7iagqXfSYjZ4EGHw/exec?action=hitung-jarak&asal=${koordinatSekarang}&tujuan=${koordinat}`
-      );
-  
-      // Debugging: Cek hasil jarak
-      console.log('Jarak:', jarak.data);
-  
-      // Cek jika API mengembalikan pesan error atau respons false
-      if (jarak.data.response === false) {
-        Alert.alert('Kesalahan',  'absen tidak dapat dilakukan,tolong absen di rumah sendiri.');
+      const response = await axios.get('http://192.168.1.10:8000/api/cek-jam');
+      if (response.data.isValid === false) {
+        Alert.alert('Kesalahan', 'Sesi absen telah berakhir.');
         return;
       }
-  
-     
-      if (jarak.data.values >= 20) {
-        Alert.alert('Kesalahan', 'Absen hanya bisa dilakukan jika Anda berada di rumah sendiri (jarak <= 20 meter).');
+
+     const jarakResponse = await axios.get(
+  `https://script.google.com/macros/s/AKfycbynJLSI3baFpoRJp7cWwIs22b5a8VNAqaXniwmyufMGq7dwgcnPJiVpNeHLs6_Byqac3A/exec?action=hitung-jarak&asal=${koordinatSekarang}&tujuan=${koordinat}`
+);
+
+console.log("Respons API Jarak:", jarakResponse.data);
+
+
+      const jarakData = jarakResponse.data;
+      console.log(`Jarak dihitung: ${jarakData.values} meter`);
+
+      if (!jarakData.response) {
+        Alert.alert('Kesalahan', 'Absen tidak dapat dilakukan, tolong absen di rumah sendiri.');
         return;
       }
-  
+
+      if (jarakData.values >= 20) {
+        Alert.alert('Kesalahan', `Absen hanya bisa dilakukan jika Anda berada di rumah sendiri (jarak = ${jarakData.values} meter).`);
+        return;
+      }
+
       const statusCode =
         selectedStatus === 'Izin' ? 'i' : selectedStatus === 'Sakit' ? 's' : 'h';
       const data = {
         nisn: nisn,
         status: statusCode,
-        koordinat: `${currentLocation.latitude}, ${currentLocation.longitude}`,
+        koordinat: koordinatSekarang,
       };
-  
-      const responsToken = await axios.get('http://192.168.1.10:8000/api/generate-token');
-      const token = responsToken.data.token;
-  
-      const respons = await axios.post('http://192.168.1.10:8000/api/absensi', data, {
+
+      const tokenResponse = await axios.get('http://192.168.1.10:8000/api/generate-token');
+      const token = tokenResponse.data.token;
+
+      const absensiResponse = await axios.post('http://192.168.1.10:8000/api/absensi', data, {
         headers: { Authorization: `Bearer ${token}` },
       });
-  
-      if (respons.data) {
+
+      if (absensiResponse.data) {
         if (selectedStatus === 'Izin' || selectedStatus === 'Sakit') {
           const phoneNumber = '+6283896064130';
           let message = `Nama: ${nama}\nNISN: ${nisn}`;
-  
+
           if (selectedStatus === 'Izin') {
             message += `\nAlasan Izin:`;
           } else if (selectedStatus === 'Sakit') {
             message += `\nKeterangan: Sakit\n*Harap melampirkan bukti surat sakit dari dokter, jika dalam 24 jam tidak melampirkan maka akan dianggap alfa.*`;
           }
-  
+
           const whatsappURL = `https://wa.me/${phoneNumber}?text=${encodeURIComponent(message)}`;
           const supported = await Linking.canOpenURL(whatsappURL);
-  
+
           if (supported) {
             await Linking.openURL(whatsappURL);
           } else {
@@ -176,11 +182,10 @@ export default function AttendanceScreen() {
           Alert.alert('Berhasil', 'Absen Hadir berhasil.');
         }
       }
-  
-      // Set cooldown 30 detik setelah absen
-      const cooldownDuration = 30; 
+
+      const cooldownDuration = 30;
       const cooldownEndTime = new Date().getTime() + cooldownDuration * 1000;
-  
+
       setIsCooldown(true);
       setRemainingTime(cooldownDuration);
       await AsyncStorage.setItem('cooldownTime', cooldownEndTime.toString());
@@ -189,7 +194,6 @@ export default function AttendanceScreen() {
       Alert.alert('Kesalahan', 'Gagal mengirim data. Silakan coba lagi.');
     }
   };
-  
 
   return (
     <View style={styles.container}>
