@@ -1,15 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import {
-  StyleSheet,
-  View,
-  Text,
-  Alert,
-  TouchableOpacity,
-  Linking,
-} from 'react-native';
+import { StyleSheet, View, Text, Alert, TouchableOpacity, Linking, TextInput } from 'react-native';
 import MapView, { Marker } from 'react-native-maps';
 import * as Location from 'expo-location';
-import { Picker } from '@react-native-picker/picker';
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRootNavigationState } from 'expo-router';
@@ -24,6 +16,7 @@ export default function AttendanceScreen() {
   const [selectedStatus, setSelectedStatus] = useState('');
   const [isCooldown, setIsCooldown] = useState(false);
   const [remainingTime, setRemainingTime] = useState(0);
+  const [reason, setReason] = useState(''); // State untuk menyimpan alasan
   const { routes } = useRootNavigationState();
   const { params } = routes[0];
   const { nisn, koordinat, nama } = params;
@@ -124,12 +117,11 @@ export default function AttendanceScreen() {
         return;
       }
 
-     const jarakResponse = await axios.get(
-  `https://script.google.com/macros/s/AKfycbynJLSI3baFpoRJp7cWwIs22b5a8VNAqaXniwmyufMGq7dwgcnPJiVpNeHLs6_Byqac3A/exec?action=hitung-jarak&asal=${koordinatSekarang}&tujuan=${koordinat}`
-);
+      const jarakResponse = await axios.get(
+        `https://script.google.com/macros/s/AKfycbynJLSI3baFpoRJp7cWwIs22b5a8VNAqaXniwmyufMGq7dwgcnPJiVpNeHLs6_Byqac3A/exec?action=hitung-jarak&asal=${koordinatSekarang}&tujuan=${koordinat}`
+      );
 
-console.log("Respons API Jarak:", jarakResponse.data);
-
+      console.log("Respons API Jarak:", jarakResponse.data);
 
       const jarakData = jarakResponse.data;
       console.log(`Jarak dihitung: ${jarakData.values} meter`);
@@ -150,6 +142,7 @@ console.log("Respons API Jarak:", jarakResponse.data);
         nisn: nisn,
         status: statusCode,
         koordinat: koordinatSekarang,
+        alasan: reason, 
       };
 
       const tokenResponse = await axios.get('http://192.168.1.10:8000/api/generate-token');
@@ -165,7 +158,7 @@ console.log("Respons API Jarak:", jarakResponse.data);
           let message = `Nama: ${nama}\nNISN: ${nisn}`;
 
           if (selectedStatus === 'Izin') {
-            message += `\nAlasan Izin:`;
+            message += `\nAlasan Izin: ${reason}`;
           } else if (selectedStatus === 'Sakit') {
             message += `\nKeterangan: Sakit\n*Harap melampirkan bukti surat sakit dari dokter, jika dalam 24 jam tidak melampirkan maka akan dianggap alfa.*`;
           }
@@ -181,6 +174,10 @@ console.log("Respons API Jarak:", jarakResponse.data);
         } else if (selectedStatus === 'Hadir') {
           Alert.alert('Berhasil', 'Absen Hadir berhasil.');
         }
+
+        // Reset alasan dan status setelah pengiriman
+        setReason('');
+        setSelectedStatus('');
       }
 
       const cooldownDuration = 30;
@@ -215,18 +212,46 @@ console.log("Respons API Jarak:", jarakResponse.data);
         <Text style={styles.loadingText}>Menunggu lokasi...</Text>
       )}
 
-      <View style={styles.pickerContainer}>
-        <Picker
-          selectedValue={selectedStatus}
-          onValueChange={(itemValue) => setSelectedStatus(itemValue)}
-          style={styles.picker}
+      <View style={styles.statusContainer}>
+        <TouchableOpacity
+          style={[
+            styles.statusButton,
+            selectedStatus === 'Hadir' && styles.selectedStatusButton,
+          ]}
+          onPress={() => setSelectedStatus('Hadir')}
         >
-          <Picker.Item label="Pilih Kehadiran" value="" />
-          <Picker.Item label="Hadir" value="Hadir" />
-          <Picker.Item label="Sakit" value="Sakit" />
-          <Picker.Item label="Izin" value="Izin" />
-        </Picker>
+          <Text style={styles.statusButtonText}>Hadir</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[
+            styles.statusButton,
+            selectedStatus === 'Sakit' && styles.selectedStatusButton,
+          ]}
+          onPress={() => setSelectedStatus('Sakit')}
+        >
+          <Text style={styles.statusButtonText}>Sakit</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[
+            styles.statusButton,
+            selectedStatus === 'Izin' && styles.selectedStatusButton,
+          ]}
+          onPress={() => setSelectedStatus('Izin')}
+        >
+          <Text style={styles.statusButtonText}>Izin</Text>
+        </TouchableOpacity>
       </View>
+
+      {(selectedStatus === 'Sakit' || selectedStatus === 'Izin') && (
+        <TextInput
+          style={styles.input}
+          placeholder="Masukkan alasan..."
+          value={reason}
+          onChangeText={setReason}
+        />
+      )}
 
       <TouchableOpacity
         style={[styles.button, isCooldown && { backgroundColor: '#ccc' }]}
@@ -259,16 +284,44 @@ const styles = StyleSheet.create({
     borderRadius: 15,
     marginBottom: 20,
   },
-  pickerContainer: {
+  loadingText: { 
+    color: '#fff',
+    textAlign: 'center',
+    fontSize: 18,
+    marginTop: 50,
+  },
+  statusContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
     marginVertical: 20,
     marginHorizontal: 20,
-    borderWidth: 1,
-    borderColor: '#ccc',
-    borderRadius: 8,
   },
-  picker: {
-    height: 50,
-    width: '100%',
+  statusButton: {
+    backgroundColor: 'transparent',
+    borderWidth: 1,
+    borderColor: '#4CAF50', 
+    paddingHorizontal: 20,  
+    paddingVertical: 8,    
+    borderRadius: 5, 
+    alignItems: 'center',
+    justifyContent: 'center',
+    flex: 1,
+    marginHorizontal: 5,   
+  },
+  selectedStatusButton: {
+    backgroundColor: '#4CAF50',
+  },
+  statusButtonText: {
+    color: '#fff',
+    fontWeight: 'bold',
+    fontSize: 16,
+  },
+  input: {
+    backgroundColor: '#fff',
+    padding: 15,  
+    marginVertical: 10,
+    borderRadius: 5,
+    fontSize: 18,
   },
   button: {
     backgroundColor: '#4CAF50',
@@ -292,11 +345,5 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     color: '#fff',
     fontSize: 14,
-  },
-  loadingText: { 
-    color: '#fff',
-    textAlign: 'center',
-    fontSize: 18,
-    marginTop: 50,
   },
 });
