@@ -1,9 +1,9 @@
-import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Alert } from 'react-native';
-import { useRootNavigationState, useRouter } from 'expo-router';
+import React, { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, Alert, Animated, Easing } from 'react-native';
 import { CameraType, CameraView, useCameraPermissions } from 'expo-camera';
 import { Ionicons } from '@expo/vector-icons';
 import axios from 'axios';
+import { useRootNavigationState, useRouter } from 'expo-router';
 
 export default function Home() {
   const { routes } = useRootNavigationState();
@@ -11,95 +11,141 @@ export default function Home() {
   const { params } = routes[0];
   const [facing, setFacing] = useState<CameraType>('back');
   const [permission, requestPermission] = useCameraPermissions();
-  const router = useRouter(); // Untuk navigasi ke halaman index
-  const [status, setStatus] = useState<string>('');
+  const router = useRouter();
+  const [status, setStatus] = useState<string>(''); // Menyimpan status online/offline
 
+  const [lineAnim] = useState(new Animated.Value(0));
+
+  // Animasi garis scan yang bergerak dari atas ke bawah
+  const startScanAnimation = () => {
+    Animated.loop(
+      Animated.timing(lineAnim, {
+        toValue: 1,
+        duration: 3000,
+        useNativeDriver: false,
+        easing: Easing.linear,
+      })
+    ).start();
+  };
+
+  useEffect(() => {
+    if (show) {
+      startScanAnimation(); // Mulai animasi saat kamera ditampilkan
+    }
+  }, [show]);
+
+  // Jika izin kamera belum diberikan
   if (!permission) {
     return <View />;
   }
 
+  // Jika izin kamera tidak diberikan
   if (!permission.granted) {
     return (
       <View style={styles.container}>
-        <Text style={styles.message}>We need your permission to show the camera</Text>
+        <Text style={styles.message}>Kami memerlukan izin Anda untuk menampilkan kamera</Text>
         <TouchableOpacity style={styles.button} onPress={requestPermission}>
-          <Text style={styles.buttonText}>Grant Permission</Text>
+          <Text style={styles.buttonText}>Berikan Izin</Text>
         </TouchableOpacity>
       </View>
     );
   }
 
-  // Menangani hasil scan QR Code
-  type QRCodeResult = {
-    data: String;
-  };
-
-  async function handleScanned(qr: QRCodeResult) {
+  // Fungsi untuk menangani hasil scan QR Code
+  async function handleScanned(qr: { data: string }) {
     setShow(false);
 
-    const data = {
-      nisn: params.nisn,
-      status: 'h',
-      koordinat: '-6.798919218710382, 106.77984713684613', // Koordinat contoh, ganti sesuai kebutuhan
-    };
+    try {
+      // Cek status sesi sebelum melanjutkan
+      const statusResponse = await axios.get("http://192.168.1.10:8000/api/cek-status");
+      if (statusResponse.data.status === 'online') {
+        alert('Absensi hanya bisa dilakukan saat offline');
+        return;
+      }
 
-    // Kirim request absensi ke API
-    const response = await axios.post('http://192.168.1.10:8000/api/absensi', data, { headers: { Authorization: `Bearer ${qr.data}` } });
+      // Kirim request absensi
+      const data = {
+        nisn: params.nisn,
+        status: 'h',
+        koordinat: '-6.798919218710382, 106.77984713684613',
+      };
 
-    if (response.data) {
-      alert('Berhasil absen');
+      const response = await axios.post('http://192.168.1.10:8000/api/absensi', data, {
+        headers: { Authorization: `Bearer ${qr.data}` },
+      });
+
+      if (response.data) {
+        alert('Berhasil absen');
+      }
+    } catch (error) {
+      console.error("Gagal absen:", error);
+      alert('Gagal melakukan absen, silakan coba lagi.');
     }
   }
 
-  // Fungsi untuk mengganti kamera depan atau belakang
+  // Fungsi untuk mengganti posisi kamera (depan/ belakang)
   function toggleCameraFacing() {
     setFacing(current => (current === 'back' ? 'front' : 'back'));
   }
 
-  // Fungsi Logout
+  // Fungsi untuk Logout
   function handleLogout() {
     Alert.alert(
-      'Logout',
-      'Are you sure you want to logout?',
+      'Keluar',
+      'Apakah Anda yakin ingin keluar?',
       [
-        { text: 'No', style: 'cancel' },
-        { text: 'Yes', onPress: () => router.replace('/') },
+        { text: 'Tidak', style: 'cancel' },
+        { text: 'Ya', onPress: () => router.replace('/') },
       ]
     );
   }
 
-  // Fungsi untuk memeriksa status online
+  // Fungsi untuk cek status online
   const handleOnline = async () => {
     try {
       const response = await axios.get("http://192.168.1.10:8000/api/cek-status");
       if (response.data.status !== 'online') {
         return alert('Bukan sesi online');
       }
-      // Menggunakan query params untuk mengirimkan nisn dan koordinat ke halaman lain
       router.push(`/online-screen?nisn=${params.nisn}&koordinat=${params.koordinat}`);
     } catch (error) {
       console.error("Error fetching status:", error);
       alert('Gagal memeriksa status online');
     }
   };
-  
+
   return (
     <View style={styles.container}>
       {show ? (
         <View style={styles.fullscreenCamera}>
           <CameraView
             barcodeScannerSettings={{ barcodeTypes: ['qr'] }}
-            onBarcodeScanned={qr => handleScanned(qr)}
+            onBarcodeScanned={handleScanned}
             style={styles.camera}
             facing={facing}
           />
-          {/* Tombol di bagian bawah kamera */}
+          {/* Garis pemindaian animasi */}
+          <Animated.View
+            style={[
+              styles.scanLine,
+              {
+                transform: [
+                  {
+                    translateY: lineAnim.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [0, 300],
+                    }),
+                  },
+                ],
+              },
+            ]}
+          />
           <View style={styles.bottomButtons}>
             <TouchableOpacity style={styles.buttonFlip} onPress={toggleCameraFacing}>
-              <Text style={styles.text}>Flip Camera</Text>
+              <Text style={styles.text}>Flip Kamera</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.buttonFlip} onPress={() => setShow(false)}>
-              <Text style={styles.text}>Cancel</Text>
+              <Text style={styles.text}>Batal</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -107,21 +153,15 @@ export default function Home() {
         <>
           <Text style={styles.greeting}>{params.nama}</Text>
 
-          {/* Tombol untuk QR-Code */}
           <TouchableOpacity style={styles.button} onPress={() => setShow(true)}>
             <Text style={styles.buttonText}>QR-Code</Text>
           </TouchableOpacity>
 
-          {/* Tombol untuk Online */}
           <Text>{status}</Text>
-          <TouchableOpacity
-            style={styles.button}
-            onPress={() => handleOnline()}
-          >
+          <TouchableOpacity style={styles.button} onPress={handleOnline}>
             <Text style={styles.buttonText}>Online</Text>
           </TouchableOpacity>
 
-          {/* Tombol Logout */}
           <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
             <Ionicons name="log-out-outline" size={30} color="#fff" />
           </TouchableOpacity>
@@ -142,6 +182,19 @@ const styles = StyleSheet.create({
   fullscreenCamera: {
     flex: 1,
     width: '100%',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  camera: {
+    flex: 1,
+    width: '100%',
+  },
+  scanLine: {
+    position: 'absolute',
+    top: 0,
+    width: '100%',
+    height: 3,
+    backgroundColor: 'rgba(255, 0, 0, 0.7)',
   },
   button: {
     width: 250,
@@ -161,14 +214,6 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: 'bold',
     color: '#fff',
-  },
-  message: {
-    textAlign: 'center',
-    paddingBottom: 10,
-    color: '#fff',
-  },
-  camera: {
-    flex: 1,
   },
   bottomButtons: {
     flexDirection: 'row',
@@ -206,5 +251,11 @@ const styles = StyleSheet.create({
     height: 60,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  message: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#fff',
+    marginBottom: 20,
   },
 });

@@ -244,7 +244,7 @@ export default function AttendanceScreen() {
         </TouchableOpacity>
       </View>
 
-      {(selectedStatus === 'Sakit' || selectedStatus === 'Izin') && (
+      {(selectedStatus === 'Izin') && (
         <TextInput
           style={styles.input}
           placeholder="Masukkan alasan..."
