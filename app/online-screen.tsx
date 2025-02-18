@@ -100,89 +100,138 @@ export default function AttendanceScreen() {
 
   const handleSubmit = async () => {
     if (isCooldown) return;
-
+  
     if (!selectedStatus) {
       Alert.alert('Kesalahan', 'Harap pilih status kehadiran Anda.');
       return;
     }
-
+  
     const koordinatSekarang = `${currentLocation.latitude},${currentLocation.longitude}`;
     console.log('Koordinat Sekarang:', koordinatSekarang);
     console.log('Koordinat Tujuan:', koordinat);
-
+  
     try {
       const response = await axios.get('http://192.168.1.10:8000/api/cek-jam');
       if (response.data.isValid === false) {
         Alert.alert('Kesalahan', 'Sesi absen telah berakhir.');
         return;
       }
-
-      const jarakResponse = await axios.get(
-        `https://script.google.com/macros/s/AKfycbynJLSI3baFpoRJp7cWwIs22b5a8VNAqaXniwmyufMGq7dwgcnPJiVpNeHLs6_Byqac3A/exec?action=hitung-jarak&asal=${koordinatSekarang}&tujuan=${koordinat}`
-      );
-
-      console.log("Respons API Jarak:", jarakResponse.data);
-
-      const jarakData = jarakResponse.data;
-      console.log(`Jarak dihitung: ${jarakData.values} meter`);
-
-      if (!jarakData.response) {
-        Alert.alert('Kesalahan', 'Absen tidak dapat dilakukan, tolong absen di rumah sendiri.');
-        return;
-      }
-
-      if (jarakData.values >= 20) {
-        Alert.alert('Kesalahan', `Absen hanya bisa dilakukan jika Anda berada di rumah sendiri (jarak = ${jarakData.values} meter).`);
-        return;
-      }
-
-      const statusCode =
-        selectedStatus === 'Izin' ? 'i' : selectedStatus === 'Sakit' ? 's' : 'h';
-      const data = {
-        nisn: nisn,
-        status: statusCode,
-        koordinat: koordinatSekarang,
-        alasan: reason, 
-      };
-
-      const tokenResponse = await axios.get('http://192.168.1.10:8000/api/generate-token');
-      const token = tokenResponse.data.token;
-
-      const absensiResponse = await axios.post('http://192.168.1.10:8000/api/absensi', data, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-
-      if (absensiResponse.data) {
-        if (selectedStatus === 'Izin' || selectedStatus === 'Sakit') {
-          const phoneNumber = '+6283896064130';
-          let message = `Nama: ${nama}\nNISN: ${nisn}`;
-
-          if (selectedStatus === 'Izin') {
-            message += `\nAlasan Izin: ${reason}`;
-          } else if (selectedStatus === 'Sakit') {
-            message += `\nKeterangan: Sakit\n*Harap melampirkan bukti surat sakit dari dokter, jika dalam 24 jam tidak melampirkan maka akan dianggap alfa.*`;
+  
+      // Absen untuk Izin dan Sakit mengabaikan pengecekan jarak
+      if (selectedStatus === 'Izin' || selectedStatus === 'Sakit') {
+        // Lewati pengecekan jarak
+        const statusCode =
+          selectedStatus === 'Izin' ? 'i' : selectedStatus === 'Sakit' ? 's' : 'h';
+        const data = {
+          nisn: nisn,
+          status: statusCode,
+          koordinat: koordinatSekarang,
+          alasan: reason, 
+        };
+  
+        const tokenResponse = await axios.get('http://192.168.1.10:8000/api/generate-token');
+        const token = tokenResponse.data.token;
+  
+        const absensiResponse = await axios.post('http://192.168.1.10:8000/api/absensi', data, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+  
+        if (absensiResponse.data) {
+          if (selectedStatus === 'Izin' || selectedStatus === 'Sakit') {
+            const phoneNumber = '+6283896064130';
+            let message = `Nama: ${nama}\nNISN: ${nisn}`;
+  
+            if (selectedStatus === 'Izin') {
+              message += `\nAlasan Izin: ${reason}`;
+            } else if (selectedStatus === 'Sakit') {
+              message += `\nKeterangan: Sakit\n*Harap melampirkan bukti surat sakit dari dokter, jika dalam 24 jam tidak melampirkan maka akan dianggap alfa.*`;
+            }
+  
+            const whatsappURL = `https://wa.me/${phoneNumber}?text=${encodeURIComponent(message)}`;
+            const supported = await Linking.canOpenURL(whatsappURL);
+  
+            if (supported) {
+              await Linking.openURL(whatsappURL);
+            } else {
+              Alert.alert('Kesalahan', 'Tidak dapat membuka WhatsApp.');
+            }
+          } else if (selectedStatus === 'Hadir') {
+            Alert.alert('Berhasil', 'Absen Hadir berhasil.');
           }
-
-          const whatsappURL = `https://wa.me/${phoneNumber}?text=${encodeURIComponent(message)}`;
-          const supported = await Linking.canOpenURL(whatsappURL);
-
-          if (supported) {
-            await Linking.openURL(whatsappURL);
-          } else {
-            Alert.alert('Kesalahan', 'Tidak dapat membuka WhatsApp.');
-          }
-        } else if (selectedStatus === 'Hadir') {
-          Alert.alert('Berhasil', 'Absen Hadir berhasil.');
+  
+          // Reset alasan dan status setelah pengiriman
+          setReason('');
+          setSelectedStatus('');
         }
-
-        // Reset alasan dan status setelah pengiriman
-        setReason('');
-        setSelectedStatus('');
+      } else {
+        // Pengecekan jarak untuk status "Hadir"
+        const jarakResponse = await axios.get(
+          `https://script.google.com/macros/s/AKfycbynJLSI3baFpoRJp7cWwIs22b5a8VNAqaXniwmyufMGq7dwgcnPJiVpNeHLs6_Byqac3A/exec?action=hitung-jarak&asal=${koordinatSekarang}&tujuan=${koordinat}`
+        );
+  
+        console.log("Respons API Jarak:", jarakResponse.data);
+  
+        const jarakData = jarakResponse.data;
+        console.log(`Jarak dihitung: ${jarakData.values} meter`);
+  
+        if (!jarakData.response) {
+          Alert.alert('Kesalahan', 'Absen tidak dapat dilakukan, tolong absen di rumah sendiri.');
+          return;
+        }
+  
+        if (jarakData.values >= 20) {
+          Alert.alert('Kesalahan', `Absen hanya bisa dilakukan jika Anda berada di rumah sendiri (jarak = ${jarakData.values} meter).`);
+          return;
+        }
+  
+        const statusCode =
+          selectedStatus === 'Izin' ? 'i' : selectedStatus === 'Sakit' ? 's' : 'h';
+        const data = {
+          nisn: nisn,
+          status: statusCode,
+          koordinat: koordinatSekarang,
+          alasan: reason, 
+        };
+  
+        const tokenResponse = await axios.get('http://192.168.1.10:8000/api/generate-token');
+        const token = tokenResponse.data.token;
+  
+        const absensiResponse = await axios.post('http://192.168.1.10:8000/api/absensi', data, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+  
+        if (absensiResponse.data) {
+          if (selectedStatus === 'Izin' || selectedStatus === 'Sakit') {
+            const phoneNumber = '+6283896064130';
+            let message = `Nama: ${nama}\nNISN: ${nisn}`;
+  
+            if (selectedStatus === 'Izin') {
+              message += `\nAlasan Izin: ${reason}`;
+            } else if (selectedStatus === 'Sakit') {
+              message += `\nKeterangan: Sakit\n*Harap melampirkan bukti surat sakit dari dokter, jika dalam 24 jam tidak melampirkan maka akan dianggap alfa.*`;
+            }
+  
+            const whatsappURL = `https://wa.me/${phoneNumber}?text=${encodeURIComponent(message)}`;
+            const supported = await Linking.canOpenURL(whatsappURL);
+  
+            if (supported) {
+              await Linking.openURL(whatsappURL);
+            } else {
+              Alert.alert('Kesalahan', 'Tidak dapat membuka WhatsApp.');
+            }
+          } else if (selectedStatus === 'Hadir') {
+            Alert.alert('Berhasil', 'Absen Hadir berhasil.');
+          }
+  
+          // Reset alasan dan status setelah pengiriman
+          setReason('');
+          setSelectedStatus('');
+        }
       }
-
+  
       const cooldownDuration = 30;
       const cooldownEndTime = new Date().getTime() + cooldownDuration * 1000;
-
+  
       setIsCooldown(true);
       setRemainingTime(cooldownDuration);
       await AsyncStorage.setItem('cooldownTime', cooldownEndTime.toString());
@@ -191,7 +240,7 @@ export default function AttendanceScreen() {
       Alert.alert('Kesalahan', 'Gagal mengirim data. Silakan coba lagi.');
     }
   };
-
+  
   return (
     <View style={styles.container}>
       {currentLocation.latitude !== 0 && currentLocation.longitude !== 0 ? (
